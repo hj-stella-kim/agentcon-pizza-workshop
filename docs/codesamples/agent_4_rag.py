@@ -20,9 +20,6 @@ file_search = FileSearchTool(vector_store_ids=[vector_store_id])
 toolset = ToolSet()
 toolset.add(file_search)
 
-# Enable automatic function calling for this toolset so the agent can call functions directly
-project_client.agents.enable_auto_function_calls(toolset)
-
 # Creating the agent
 agent = project_client.agents.create_agent(
     model="gpt-4o",

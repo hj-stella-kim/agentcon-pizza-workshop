@@ -1,23 +1,49 @@
 import os
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
-from azure.ai.agents.models import MessageRole, FilePurpose, FunctionTool, FileSearchTool, ToolSet
+from azure.ai.agents.models import MessageRole, FilePurpose, FunctionTool, ToolSet, FileSearchTool,VectorStoreDataSource, VectorStoreDataSourceAssetType
 from tools import calculate_pizza_for_people
 from dotenv import load_dotenv
 
+
 load_dotenv(override=True)
 
-# Creating the AIProjectClient
-from azure.core.credentials import AzureKeyCredential
-
+# Create Project Client Instance
 project_client = AIProjectClient(
     endpoint=os.environ["PROJECT_CONNECTION_STRING"],
-    credential=AzureKeyCredential(os.environ["AZURE_API_KEY"])
+    credential=DefaultAzureCredential()
 )
 
-# Create the file_search tool
-vector_store_id = "<INSERT COPIED VECTOR STORE ID>"
-file_search = FileSearchTool(vector_store_ids=[vector_store_id])
+DOCS_DIR = "./documents"
+
+# 1. Upload the files (you already have this part, but here it is for context)
+file_ids = []
+for fname in os.listdir(DOCS_DIR):
+    fpath = os.path.join(DOCS_DIR, fname)
+    if not os.path.isfile(fpath) or fname.startswith('.'):
+        continue
+    print(f"Uploading: {fname}")
+    uploaded = project_client.agents.files.upload_and_poll(
+        file_path=fpath,
+        purpose=FilePurpose.AGENTS
+    )
+    file_ids.append(uploaded.id)
+    print(f"Uploaded {fname}, ID: {uploaded.id}")
+
+if not file_ids:
+    raise RuntimeError("No files uploaded. Put files in ./documents and re-run.")
+
+print(f"Total files uploaded: {len(file_ids)}")
+
+vector_store = project_client.agents.vector_stores.create_and_poll(
+    file_ids=file_ids,
+    name="contoso-pizza-store-information"
+)
+
+print(f"Created vector store, ID: {vector_store.id}")
+
+file_search = FileSearchTool(vector_store_ids=[vector_store.id])
+
 
 # Create the function tool
 function_tool = FunctionTool(functions={calculate_pizza_for_people})
@@ -27,12 +53,9 @@ toolset = ToolSet()
 toolset.add(file_search)
 toolset.add(function_tool)
 
-# Enable automatic function calling for this toolset so the agent can call functions directly
-project_client.agents.enable_auto_function_calls(toolset)
-
 # Creating the agent
 agent = project_client.agents.create_agent(
-    model="gpt-4o",
+    model="gpt-4o-mini",
     name="my-agent",
     instructions=open("instructions.txt").read(),
     top_p=0.7,
@@ -77,3 +100,4 @@ finally:
     # Clean up the agent when done
     project_client.agents.delete_agent(agent.id)
     print("Deleted agent")
+

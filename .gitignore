@@ -4,3 +4,4 @@ node_modules/
 .venv/
 workshop/.env
 workshop/__pycache__
+.env
